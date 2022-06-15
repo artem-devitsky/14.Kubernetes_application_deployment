@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  jenkins-helm:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2022-06-15T07:38:06.936352187+03:00"
+    description: A Helm chart for Kubernetes
+    digest: 67ee05733d652953f8c084a489c90fbf2adcf3f03126f45cf39a09ba4e430fc2
+    name: jenkins-helm
+    type: application
+    urls:
+    - https://artem-devitsky.github.io/14.Kubernetes_application_deployment/jenkins-helm-0.1.0.tgz
+    version: 0.1.0
+generated: "2022-06-15T07:38:06.935940564+03:00"

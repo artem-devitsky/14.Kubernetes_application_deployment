@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JAVA_OPTS
+              value: "-Djenkins.install.runSetupWizard=false"
+            - name: PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.name }}
+                  key: password
+            - name: CASC_JENKINS_CONFIG
+              value: {{ .Values.deployment.jenkins_yaml_path }}
+          ports:
+            - name: http-port
+              containerPort: {{ index .Values "containerPort" "http-port" }}
+            - name: jnlp-port
+              containerPort: {{ index .Values "containerPort" "jnlp-port" }}
+          securityContext:
+            runAsUser: 0
+          resources:
+              {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: docker-sock
+              mountPath: {{ .Values.deployment.docker_sock_path }}
+            - name: jenkins-auth-config
+              mountPath: {{ .Values.deployment.basic_security_path }}
+              subPath: basic-security.groovy
+            - name: jenkins-config-yaml
+              mountPath: {{ .Values.deployment.jenkins_yaml_path }}
+              subPath: jenkins.yaml
+            - name: jenkins-config
+              mountPath: {{ .Values.deployment.jenkins_path }}
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: {{ .Values.deployment.docker_sock_path }}
+        - name: jenkins-auth-config
+          configMap:
+            name: basic-security
+        - name: jenkins-config-yaml
+          configMap:
+            name: jenkins-config
+        - name: jenkins-config
+          nfs:
+            server: {{ .Values.deployment.nfs_server }}
+            path: {{ .Values.deployment.nfs_path }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: basic-security
+  namespace: jenkins-helm
+data:
+  basic-security.groovy: |
+    #!groovy
+    import jenkins.model.*
+    import hudson.security.*
+    def instance = Jenkins.getInstance()
+    println "--> creating local user 'admin'"
+    dev password = System.getenv("PASS")
+    def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+    hudsonRealm.createAccount('admin',"admin")
+    instance.setSecurityRealm(hudsonRealm)
+    def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+    strategy.setAllowAnonymousRead(true)
+    instance.setAuthorizationStrategy(strategy)
+    instance.save()
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-config
+  namespace: {{ .Values.namespace }}
+data:
+  jenkins.yaml: |
+        jenkins:
+          numExecutors: 2
+          clouds:
+          - kubernetes:
+              containerCapStr: "10"
+              maxRequestsPerHostStr: "32"
+              jenkinsUrl: "http://{{ .Values.name }}:8080"
+              name: "kubernetes"
+              namespace: "{{ .Values.name }}"
+              skipTlsVerify: true
+        credentials:
+          system:
+            domainCredentials:
+            - credentials:
+              - usernamePassword:
+                  description: "Githubuser"
+                  id: "some_randome"
+                  password: "password"
+                  scope: GLOBAL
+                  username: "git_hub_user"
+        unclassified:
+          location:
+            adminAddress: {{ .Values.admin_email }}
+            url: {{ index .Values "url" "host_url" }}
+          shell:
+            shell: "/bin/bash"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+type: Opaque
+data:
+  password: Password
