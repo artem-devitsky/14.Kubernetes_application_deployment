@@ -1,1 +1,0 @@
-# 14.Kubernetes_application_deployment
